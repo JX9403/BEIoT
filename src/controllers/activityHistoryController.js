@@ -1,19 +1,52 @@
+
+const { default: mqtt } = require("mqtt");
 const { getAllActivityHistoryService, createActivityHistoryService, deleteActivityHistoryService } = require("../services/activityHistoryService");
 
-const postCreateActivityHistory = async (req, res) => {
-  let { device, action } = req.body;
 
-  let reqActivityHistory = {
-    device, action
+const mqttClient = mqtt.connect("mqtt://192.168.0.107:1886", {
+  username: "user1",
+  password: "123456",
+});
+
+mqttClient.on("connect", () => {
+  console.log("📡 MQTT Client đã kết nối thành công!");
+});
+
+mqttClient.on("error", (err) => {
+  console.error("❌ Lỗi kết nối MQTT:", err);
+});
+
+const postCreateActivityHistory = async (req, res) => {
+  if (!mqttClient) {
+    return res.status(500).json({ error: "MQTT Client chưa được khởi tạo!" });
   }
 
-  let result = await createActivityHistoryService(reqActivityHistory);
+  const topicMap = {
+    "fan": "devices/led1",
+    "light": "devices/led2",
+    "air-conditioner": "devices/led3"
+  };
 
-  return res.status(200).json({
-    EC: 0,
-    data: result
-  })
-}
+  let { device, action } = req.body;
+
+  if (!device || !action) {
+    return res.status(400).json({ error: "Thiếu thông tin device hoặc action" });
+  }
+
+  const topic = topicMap[device];
+  const message = action.toUpperCase(); // Đảm bảo "ON" hoặc "OFF"
+
+  mqttClient.publish(topic, message, { qos: 1 }, (err) => {
+    if (err) {
+      console.error("❌ Lỗi gửi MQTT:", err);
+      return res.status(500).json({ error: "Gửi lệnh MQTT thất bại" });
+    } else {
+      console.log(`📤 Đã gửi MQTT: ${topic} -> ${message}`);
+      return res.status(200).json({ message: "Success" });
+    }
+  });
+};
+
 
 const getAllActivityHistory = async (req, res) => {
   try {
